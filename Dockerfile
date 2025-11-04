@@ -1,33 +1,46 @@
-# Use Node.js 18 Alpine for smaller image size
-FROM node:18-alpine
+############################################
+# Stage 1: Builder - install dev deps & build
+############################################
+FROM node:18-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies needed for native builds (if any)
 RUN apk add --no-cache \
     python3 \
     make \
     g++
 
-# Copy package files
+# Install dependencies (including dev) and build
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
+# Copy source and tsconfig, then build to dist/
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+############################################
+# Stage 2: Runner - production-only image
+############################################
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+# Install only production dependencies
+COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
-# Copy source code
-COPY dist ./dist
+# Copy compiled output from builder
+COPY --from=builder /app/dist ./dist
 
 # Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
-
-# Change ownership of the app directory
-RUN chown -R nodejs:nodejs /app
+RUN addgroup -g 1001 -S nodejs \
+ && adduser -S nodejs -u 1001 \
+ && chown -R nodejs:nodejs /app
 USER nodejs
 
-# Expose port
+# Expose port (server defaults to 5000 if PORT not set)
 EXPOSE 5000
 
 # Health check
