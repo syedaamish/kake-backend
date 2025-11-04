@@ -33,9 +33,28 @@ connectDB();
 app.use(helmet());
 app.use(compression());
 
-// CORS configuration
+// CORS configuration with allowlist (supports multiple origins)
+const rawOrigins = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:3000';
+const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    // Allow non-browser requests or same-origin
+    if (!origin) return callback(null, true);
+
+    // Exact match or subdomain convenience: if an allow entry is a full URL, match exact; if it starts with '.', allow subdomains
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (!allowed) return false;
+      if (allowed.startsWith('.')) {
+        // allow subdomains of a domain, e.g. .vercel.app
+        return origin.endsWith(allowed);
+      }
+      return origin === allowed;
+    });
+
+    if (isAllowed) return callback(null, true);
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
   credentials: true,
   optionsSuccessStatus: 200
 }));
@@ -90,7 +109,7 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`🚀 Kake Bakery API server running on port ${PORT}`);
   console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  console.log(`🌐 Allowed Frontend URLs: ${allowedOrigins.join(', ')}`);
 });
 
 export default app;

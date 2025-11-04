@@ -2,6 +2,11 @@ import mongoose from 'mongoose';
 
 export const connectDB = async (): Promise<void> => {
   try {
+    // Allow explicitly disabling DB connection for certain environments
+    if (process.env.DB_DISABLE === 'true') {
+      console.warn('⚠️ MongoDB connection skipped via DB_DISABLE=true');
+      return;
+    }
     const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/kake-bakery';
     
     const options = {
@@ -42,8 +47,8 @@ export const connectDB = async (): Promise<void> => {
     });
 
   } catch (error) {
-    console.error('❌ MongoDB connection failed:', error);
-    process.exit(1);
+    console.error('❌ MongoDB connection failed (non-fatal):', error);
+    // Do not exit; continue running without DB
   }
 };
 
