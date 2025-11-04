@@ -4,22 +4,55 @@ export const initializeFirebase = () => {
   try {
     // Check if Firebase is already initialized
     if (admin.apps.length === 0) {
-      const serviceAccount = {
-        type: 'service_account',
-        project_id: process.env.FIREBASE_PROJECT_ID,
-        private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-        private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        client_email: process.env.FIREBASE_CLIENT_EMAIL,
-        client_id: process.env.FIREBASE_CLIENT_ID,
-        auth_uri: process.env.FIREBASE_AUTH_URI,
-        token_uri: process.env.FIREBASE_TOKEN_URI,
-        auth_provider_x509_cert_url: process.env.FIREBASE_AUTH_PROVIDER_X509_CERT_URL,
-        client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL,
-      };
+      // Prefer a single JSON env var if provided
+      let serviceAccount: admin.ServiceAccount | undefined;
+      const saJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
+      if (saJson) {
+        try {
+          const parsed = JSON.parse(saJson);
+          // Ensure private_key newlines are correct if it was stringified improperly
+          if (typeof parsed.private_key === 'string') {
+            parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+          }
+          serviceAccount = parsed as admin.ServiceAccount;
+        } catch (e) {
+          console.error('Invalid FIREBASE_SERVICE_ACCOUNT_JSON. Must be valid JSON string.');
+          throw e;
+        }
+      } else {
+        // Fallback to individual env vars
+        const envProjectId = process.env.FIREBASE_PROJECT_ID || '';
+        const envClientEmail = process.env.FIREBASE_CLIENT_EMAIL || '';
+        const envPrivateKeyRaw = process.env.FIREBASE_PRIVATE_KEY || '';
+        const envPrivateKey = envPrivateKeyRaw.replace(/\\n/g, '\n');
+
+        // Validate required fields
+        const missing: string[] = [];
+        if (!envProjectId) missing.push('FIREBASE_PROJECT_ID');
+        if (!envClientEmail) missing.push('FIREBASE_CLIENT_EMAIL');
+        if (!envPrivateKey) missing.push('FIREBASE_PRIVATE_KEY');
+
+        if (missing.length) {
+          throw new Error(`Firebase Admin credentials missing required env vars: ${missing.join(', ')}`);
+        }
+
+        serviceAccount = {
+          projectId: envProjectId,
+          clientEmail: envClientEmail,
+          privateKey: envPrivateKey,
+        } as admin.ServiceAccount;
+      }
+
+      // Final safety check for project_id presence
+      const projectId = (serviceAccount as any).projectId || (serviceAccount as any).project_id || process.env.FIREBASE_PROJECT_ID;
+      if (!projectId || typeof projectId !== 'string') {
+        throw new Error('Service account object must contain a string "project_id" property (set FIREBASE_PROJECT_ID or include in JSON).');
+      }
 
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-        projectId: process.env.FIREBASE_PROJECT_ID,
+        credential: admin.credential.cert(serviceAccount),
+        projectId,
       });
 
       console.log('🔥 Firebase Admin SDK initialized successfully');
