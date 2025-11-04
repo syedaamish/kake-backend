@@ -36,6 +36,18 @@ app.use(compression());
 // CORS configuration with allowlist (supports multiple origins)
 const rawOrigins = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:3000';
 const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean);
+// In production, also allow Vercel subdomains by default if not explicitly configured
+if (process.env.NODE_ENV === 'production') {
+  if (!allowedOrigins.includes('.vercel.app')) {
+    allowedOrigins.push('.vercel.app');
+  }
+  if (!allowedOrigins.includes('.kake.co.in')) {
+    allowedOrigins.push('.kake.co.in');
+  }
+  if (!allowedOrigins.includes('https://kake.co.in')) {
+    allowedOrigins.push('https://kake.co.in');
+  }
+}
 
 app.use(cors({
   origin: (origin, callback) => {
